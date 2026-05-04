@@ -10,9 +10,11 @@
 
   uv run python scripts/gagarin_import.py ./gagarin_import.xlsx
 
-Лист users: user_id, create_user, ref/stamp (источник), …
-Листы платежей: payments_wata_sbp, payments_wata_card, payments_stars, payments_cryptobot
-  — только строки со статусом confirmed или paid (колонка status / Status и т.п.).
+Лист users: user_id, create_user, in_panel, is_connect, ref, stamp.
+  trial_at = create_user только если in_panel=TRUE; connected_at = create_user только если is_connect=TRUE.
+  source: если ref задан — строка "referral", иначе значение колонки stamp.
+Листы платежей: payments_wata_sbp, payments_wata_card, payments_stars, payments_cryptobot,
+  payments_sbp, payments_cards, payments_fk_sbp — только строки со статусом confirmed или paid.
 
 Повторный запуск: пользователи с тем же (user_id, bot_id) не дублируются (ON CONFLICT DO NOTHING).
 Платежи без уникального ключа в БД при повторном запуске могут продублироваться.
@@ -51,6 +53,9 @@ PAYMENT_SHEETS = (
     "payments_wata_card",
     "payments_stars",
     "payments_cryptobot",
+    "payments_sbp",
+    "payments_cards",
+    "payments_fk_sbp",
 )
 
 
@@ -123,18 +128,30 @@ def _parse_amount(val: object) -> Decimal | None:
         return None
 
 
-def _pick_source(row: pd.Series, df: pd.DataFrame) -> str | None:
+def _truthy_excel(val: object) -> bool:
+    if val is None or (isinstance(val, float) and pd.isna(val)):
+        return False
+    if isinstance(val, bool):
+        return val
+    if isinstance(val, (int, float)) and not isinstance(val, bool):
+        return val != 0
+    s = str(val).strip().lower()
+    return s in ("true", "1", "yes", "да", "t")
+
+
+def _user_source(row: pd.Series, df: pd.DataFrame) -> str | None:
     ref_c = _col(df, "ref")
     stamp_c = _col(df, "stamp")
-    for c in (ref_c, stamp_c):
-        if not c:
-            continue
-        v = row.get(c)
+    ref_val = row.get(ref_c) if ref_c else None
+    if ref_val is not None and not (isinstance(ref_val, float) and pd.isna(ref_val)):
+        if str(ref_val).strip():
+            return "referral"
+    if stamp_c:
+        v = row.get(stamp_c)
         if v is None or (isinstance(v, float) and pd.isna(v)):
-            continue
+            return None
         s = str(v).strip()
-        if s:
-            return s
+        return s or None
     return None
 
 
@@ -162,6 +179,9 @@ def load_users_rows(xl: pd.ExcelFile) -> list[dict]:
     if not create_c:
         raise ValueError("На листе users не найдена колонка create_user")
 
+    in_panel_c = _col(df, "in_panel")
+    is_connect_c = _col(df, "is_connect")
+
     now = datetime.now()
     rows: list[dict] = []
     for _, row in df.iterrows():
@@ -172,19 +192,23 @@ def load_users_rows(xl: pd.ExcelFile) -> list[dict]:
         if created is None:
             logger.warning("Пропуск user_id={}: нет даты create_user", uid)
             continue
+        trial_at = created if (in_panel_c and _truthy_excel(row.get(in_panel_c))) else None
+        connected_at = (
+            created if (is_connect_c and _truthy_excel(row.get(is_connect_c))) else None
+        )
         rows.append(
             {
                 "id": uuid.uuid4(),
                 "user_id": uid,
                 "username": None,
                 "full_name": None,
-                "source": _pick_source(row, df),
+                "source": _user_source(row, df),
                 "created_at": created,
                 "bot_id": BOT_ID,
                 "bot_name": BOT_NAME,
                 "updated_at": now,
-                "trial_at": created,
-                "connected_at": created,
+                "trial_at": trial_at,
+                "connected_at": connected_at,
             }
         )
 
