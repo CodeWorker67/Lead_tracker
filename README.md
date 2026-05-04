@@ -149,3 +149,8 @@ lead_tracker/
 
 - **Архитектура, модели, паттерны (UoW, репозитории), полный список эндпоинтов, миграции, тестирование, чек-лист деплоя:** [`docs/DEVELOPERS.md`](docs/DEVELOPERS.md)
 - **Контекст для AI-ассистента (Claude Code):** [`CLAUDE.md`](CLAUDE.md)
+
+
+Очистка БД на впс
+chmod +x scripts/vps_nuke_db.sh
+./scripts/vps_nuke_db.sh

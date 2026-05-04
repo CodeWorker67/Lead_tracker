@@ -28,6 +28,8 @@ services:
     volumes:
       - ./src:/app/src
       - ./scripts/:/app/scripts
+      # импорт Excel из корня репозитория: /app/repo/<файл>.xlsx
+      - .:/app/repo:ro
     networks:
       - backend
     ports:

@@ -12,6 +12,7 @@ dependencies = [
     "fastapi>=0.119.0",
     "litestar>=2.19.0",
     "loguru>=0.7.3",
+    "openpyxl>=3.1.5",
     "pandas>=2.2.0",
     "plotly>=5.24.0",
     "psycopg2-binary>=2.9.9",
