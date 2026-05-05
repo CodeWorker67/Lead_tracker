@@ -81,6 +81,17 @@ def _apply_user_filters(stmt, date_from: datetime | None, date_to: datetime | No
     return stmt
 
 
+def _apply_payment_filters(stmt, date_from: datetime | None, date_to: datetime | None, bot_id: int | None):
+    """Фильтр по дате самого платежа (когда деньги пришли в трекер)."""
+    if date_from is not None:
+        stmt = stmt.where(Payment.created_at >= date_from)
+    if date_to is not None:
+        stmt = stmt.where(Payment.created_at <= date_to)
+    if bot_id is not None:
+        stmt = stmt.where(Payment.bot_id == bot_id)
+    return stmt
+
+
 def get_sources_stats(
     session,
     date_from: datetime | None = None,
@@ -116,7 +127,7 @@ def get_sources_stats(
         )
         .group_by(func.coalesce(User.source, "(Без источника)"))
     )
-    pay_stmt = _apply_user_filters(pay_stmt, date_from, date_to, bot_id)
+    pay_stmt = _apply_payment_filters(pay_stmt, date_from, date_to, bot_id)
     pay_map = {r.source_name: r for r in session.execute(pay_stmt).all()}
 
     paid_inner = (
@@ -132,6 +143,7 @@ def get_sources_stats(
         )
         .distinct()
     )
+    # Когорта по регистрации; платёж без ограничения по дате — «оплатили когда-либо».
     paid_inner = _apply_user_filters(paid_inner, date_from, date_to, bot_id)
     paid_sub = paid_inner.subquery()
     paid_stmt = (
@@ -144,22 +156,30 @@ def get_sources_stats(
         for r in session.execute(paid_stmt).all()
     }
 
-    return [
-        {
-            "source_name": row.source_name,
-            "total_users": int(row.total_users or 0),
-            "trial_users": int(row.trial_users or 0),
-            "connected_users": int(row.connected_users or 0),
-            "paid_users": paid_map.get(row.source_name, 0),
-            "total_payments": int(pay_map[row.source_name].total_payments)
-            if row.source_name in pay_map
-            else 0,
-            "total_revenue": float(pay_map[row.source_name].total_revenue)
-            if row.source_name in pay_map
-            else 0.0,
-        }
-        for row in user_rows
-    ]
+    user_by_src = {r.source_name: r for r in user_rows}
+    all_sources = set(user_by_src) | set(pay_map) | set(paid_map)
+
+    def _sort_key(name: str) -> tuple[int, str]:
+        urow = user_by_src.get(name)
+        n = int(urow.total_users or 0) if urow else 0
+        return (-n, name)
+
+    out: list[dict[str, Any]] = []
+    for src in sorted(all_sources, key=_sort_key):
+        ur = user_by_src.get(src)
+        pr = pay_map.get(src)
+        out.append(
+            {
+                "source_name": src,
+                "total_users": int(ur.total_users or 0) if ur else 0,
+                "trial_users": int(ur.trial_users or 0) if ur else 0,
+                "connected_users": int(ur.connected_users or 0) if ur else 0,
+                "paid_users": paid_map.get(src, 0),
+                "total_payments": int(pr.total_payments) if pr else 0,
+                "total_revenue": float(pr.total_revenue) if pr else 0.0,
+            }
+        )
+    return out
 
 
 def create_users_chart(sources_data: list[dict[str, Any]]) -> go.Figure:
@@ -309,7 +329,7 @@ def show_dashboard(
         sources_data = get_sources_stats(session, date_from, date_to, bot_id)
 
         if not sources_data:
-            st.info("Нет пользователей за выбранные фильтры.")
+            st.info("Нет данных за выбранные фильтры.")
             return
 
         total_users = sum(s["total_users"] for s in sources_data)
@@ -325,9 +345,6 @@ def show_dashboard(
         )
         paid_rate = (
             (total_paid_users / total_users * 100) if total_users > 0 else 0.0
-        )
-        conversion_rate = (
-            (total_payments / total_users * 100) if total_users > 0 else 0.0
         )
         avg_check = total_revenue / total_payments if total_payments > 0 else 0.0
 
@@ -364,7 +381,9 @@ def show_dashboard(
             st.metric(
                 label="Оплатили",
                 value=f"{total_paid_users:,}",
-                delta=f"{paid_rate:.1f}% от пользователей",
+                delta=f"{paid_rate:.1f}% от новых пользователей"
+                if total_users > 0
+                else "нет новых пользователей за период",
             )
         with c5:
             st.markdown(
@@ -373,7 +392,7 @@ def show_dashboard(
             st.metric(
                 label="Платежи",
                 value=f"{total_payments:,}",
-                delta=f"{conversion_rate:.1f}% конверсия",
+                delta="по дате оплаты",
             )
         with c6:
             st.markdown(
@@ -382,8 +401,15 @@ def show_dashboard(
             st.metric(
                 label="Выручка",
                 value=f"₽{total_revenue:,.0f}",
-                delta=f"₽{avg_check:.0f} средний чек",
+                delta=f"₽{avg_check:.0f} средний чек · по дате оплаты",
             )
+
+        st.caption(
+            "Пользователи, триал и подключения — по дате регистрации (created_at). "
+            "Платежи и выручка (включая круговую диаграмму) — по дате платежа за период. "
+            "«Оплатили» — уникальные пользователи этой когорты, у которых в данных есть "
+            "хотя бы один платёж (без ограничения по дате оплаты)."
+        )
 
         st.markdown("---")
 
@@ -427,14 +453,21 @@ def show_dashboard(
             st.info("По запросу ничего не найдено.")
         else:
             df = pd.DataFrame(filtered)
-            df["trial_rate"] = (df["trial_users"] / df["total_users"] * 100).round(1)
+            df["trial_rate"] = (
+                (df["trial_users"] / df["total_users"] * 100)
+                .where(df["total_users"] > 0, 0)
+                .round(1)
+            )
             df["connected_rate"] = (
-                df["connected_users"] / df["total_users"] * 100
-            ).round(1)
-            df["paid_rate"] = (df["paid_users"] / df["total_users"] * 100).round(1)
-            df["conversion_rate"] = (
-                df["total_payments"] / df["total_users"] * 100
-            ).round(1)
+                (df["connected_users"] / df["total_users"] * 100)
+                .where(df["total_users"] > 0, 0)
+                .round(1)
+            )
+            df["paid_rate"] = (
+                (df["paid_users"] / df["total_users"] * 100)
+                .where(df["total_users"] > 0, 0)
+                .round(1)
+            )
             df["avg_revenue"] = (df["total_revenue"] / df["total_payments"]).round(2)
             df["avg_revenue"] = df["avg_revenue"].fillna(0)
 
@@ -449,7 +482,6 @@ def show_dashboard(
                     "paid_users",
                     "paid_rate",
                     "total_payments",
-                    "conversion_rate",
                     "total_revenue",
                     "avg_revenue",
                 ]
@@ -464,7 +496,6 @@ def show_dashboard(
                 "Оплатили",
                 "Оплатили %",
                 "Платежи",
-                "Конверсия %",
                 "Выручка ₽",
                 "Средний чек ₽",
             ]
@@ -481,7 +512,6 @@ def show_dashboard(
                         "Оплатили": "{:,.0f}",
                         "Оплатили %": "{:.1f}%",
                         "Платежи": "{:,.0f}",
-                        "Конверсия %": "{:.1f}%",
                         "Выручка ₽": "₽{:,.0f}",
                         "Средний чек ₽": "₽{:.0f}",
                     }
