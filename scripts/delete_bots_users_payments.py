@@ -39,7 +39,34 @@ async def _count(session, model, bot_ids: tuple[int, ...]) -> int:
     return int((await session.execute(stmt)).scalar_one())
 
 
-async def run_delete(bot_ids: tuple[int, ...]) -> None:
+async def _delete_table_in_batches(
+    session,
+    model,
+    bot_ids: tuple[int, ...],
+    batch_size: int,
+    label: str,
+) -> int:
+    """Удаление пакетами по PK, commit после каждого пакета — меньше блокировок и виден прогресс."""
+    total = 0
+    while True:
+        ids_sq = (
+            select(model.id)
+            .where(model.bot_id.in_(bot_ids))
+            .limit(batch_size)
+        )
+        stmt = delete(model).where(model.id.in_(ids_sq))
+        result = await session.execute(stmt)
+        n = result.rowcount
+        if n is None or n <= 0:
+            await session.commit()
+            break
+        total += n
+        await session.commit()
+        logger.info("{}: пакет −{} строк, всего удалено {}", label, n, total)
+    return total
+
+
+async def run_delete(bot_ids: tuple[int, ...], batch_size: int) -> None:
     async with SessionFactory() as session:
         n_pay_before = await _count(session, Payment, bot_ids)
         n_user_before = await _count(session, User, bot_ids)
@@ -49,15 +76,23 @@ async def run_delete(bot_ids: tuple[int, ...]) -> None:
             n_pay_before,
             n_user_before,
         )
-
-        r_pay = await session.execute(delete(Payment).where(Payment.bot_id.in_(bot_ids)))
-        deleted_pay = r_pay.rowcount if r_pay.rowcount is not None else 0
-        r_user = await session.execute(delete(User).where(User.bot_id.in_(bot_ids)))
-        deleted_user = r_user.rowcount if r_user.rowcount is not None else 0
-
-        await session.commit()
         logger.info(
-            "Готово. Удалено payments={}, users={} (платежи — до удаления пользователей).",
+            "Пакеты по {} строк; между пакетами commit — на ~140k пользователей "
+            "обычно 1–5+ минут, это не зависание.",
+            batch_size,
+        )
+
+        logger.info("Сначала payments…")
+        deleted_pay = await _delete_table_in_batches(
+            session, Payment, bot_ids, batch_size, "payments"
+        )
+        logger.info("Затем users…")
+        deleted_user = await _delete_table_in_batches(
+            session, User, bot_ids, batch_size, "users"
+        )
+
+        logger.info(
+            "Готово. Итого удалено payments={}, users={}.",
             deleted_pay,
             deleted_user,
         )
@@ -78,6 +113,13 @@ def main() -> None:
         default=",".join(str(x) for x in DEFAULT_BOT_IDS),
         help="Список bot_id через запятую (по умолчанию три заданных бота)",
     )
+    p.add_argument(
+        "--batch-size",
+        type=int,
+        default=5000,
+        metavar="N",
+        help="Размер пакета DELETE (по умолчанию 5000)",
+    )
     args = p.parse_args()
 
     if not args.yes:
@@ -95,7 +137,10 @@ def main() -> None:
     if not bot_ids:
         raise SystemExit("Пустой список bot_id")
 
-    asyncio.run(run_delete(bot_ids))
+    if args.batch_size < 1:
+        raise SystemExit("--batch-size должен быть >= 1")
+
+    asyncio.run(run_delete(bot_ids, args.batch_size))
 
 
 if __name__ == "__main__":
