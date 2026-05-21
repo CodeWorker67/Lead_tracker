@@ -31,7 +31,7 @@ if str(_SRC) not in sys.path:
 from database.core import SessionFactory  # noqa: E402
 from database.models import Payment, User  # noqa: E402
 
-DEFAULT_BOT_IDS = (8159162956, 8418427746, 8713389924)
+DEFAULT_BOT_IDS = (8678955268)
 
 
 async def _count(session, model, bot_ids: tuple[int, ...]) -> int:
