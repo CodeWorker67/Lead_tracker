@@ -17,5 +17,13 @@ class Settings(BaseSettings):
     admin_password: str = "admin"
     admin_cookie_secret: str = "default-secret-change-in-production"
 
+    google_service_account_file: str = "google_key.json"
+    google_path_zoomer: str | None = None
+    google_path_open21: str | None = None
+
+    @property
+    def google_exports_enabled(self) -> bool:
+        return bool(self.google_path_zoomer or self.google_path_open21)
+
 
 settings = Settings()  # pyright: ignore

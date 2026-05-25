@@ -23,6 +23,9 @@ services:
     environment:
       POSTGRES_DSN: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       API_KEY: ${API_KEY}
+      GOOGLE_SERVICE_ACCOUNT_FILE: ${GOOGLE_SERVICE_ACCOUNT_FILE:-google_key.json}
+      GOOGLE_PATH_ZOOMER: ${GOOGLE_PATH_ZOOMER:-}
+      GOOGLE_PATH_OPEN21: ${GOOGLE_PATH_OPEN21:-}
     depends_on:
       - postgres
     volumes:
