@@ -24,8 +24,9 @@
   trial_at = create_user только если in_panel=TRUE; connected_at = create_user только если is_connect=TRUE.
   source: если ref задан — строка "referral", иначе значение колонки stamp.
 Листы платежей: payments_wata_sbp, payments_wata_card, payments_stars, payments_cryptobot,
-  payments_sbp, payments_cards, payments_fk_sbp — только строки со статусом confirmed или paid;
-  строки с amount = 10.00 пропускаются (триал).
+  payments_sbp, payments_cards, payments_fk_sbp, payments_youkassa — только строки со статусом
+  confirmed или paid; строки с amount = 10.00 пропускаются (триал); на листе payments_youkassa
+  также пропускаются платежи с amount = 1.00.
 
 Повторный запуск: пользователи с тем же (user_id, bot_id) не дублируются (ON CONFLICT DO NOTHING).
 Платежи без уникального ключа в БД при повторном запуске могут продублироваться.
@@ -60,6 +61,7 @@ BOT_NAME = "open21vpn_bot"
 
 # Триал в выгрузке — не переносим в Lead Tracker как платёж
 SKIP_TRIAL_AMOUNT = Decimal("10.00")
+SKIP_YOOKASSA_PROBE_AMOUNT = Decimal("1.00")
 
 PAYMENT_SHEETS = (
     "payments_wata_sbp",
@@ -69,7 +71,12 @@ PAYMENT_SHEETS = (
     "payments_sbp",
     "payments_cards",
     "payments_fk_sbp",
+    "payments_youkassa",
 )
+
+SHEET_SKIP_AMOUNTS: dict[str, frozenset[Decimal]] = {
+    "payments_youkassa": frozenset({SKIP_YOOKASSA_PROBE_AMOUNT}),
+}
 
 
 def _default_xlsx_path() -> str:
@@ -257,8 +264,10 @@ def load_payment_rows(xl: pd.ExcelFile, sheet: str) -> list[dict]:
         )
         return []
 
+    skip_amounts = frozenset({SKIP_TRIAL_AMOUNT}) | SHEET_SKIP_AMOUNTS.get(sheet, frozenset())
+
     out: list[dict] = []
-    skipped_trial = 0
+    skipped_amount = 0
     for _, row in df.iterrows():
         if not _status_ok(row.get(status_c)):
             continue
@@ -267,8 +276,8 @@ def load_payment_rows(xl: pd.ExcelFile, sheet: str) -> list[dict]:
         ts = _parse_dt(row.get(time_c))
         if uid is None or amt is None or ts is None:
             continue
-        if amt == SKIP_TRIAL_AMOUNT:
-            skipped_trial += 1
+        if amt in skip_amounts:
+            skipped_amount += 1
             continue
         out.append(
             {
@@ -280,11 +289,11 @@ def load_payment_rows(xl: pd.ExcelFile, sheet: str) -> list[dict]:
             }
         )
     logger.info(
-        "payments {!r}: отобрано строк: {} (пропущено триал {}₽: {})",
+        "payments {!r}: отобрано строк: {} (пропущено по сумме {}: {})",
         sheet,
         len(out),
-        SKIP_TRIAL_AMOUNT,
-        skipped_trial,
+        ", ".join(str(a) for a in sorted(skip_amounts)),
+        skipped_amount,
     )
     return out
 
