@@ -26,6 +26,7 @@ services:
       GOOGLE_SERVICE_ACCOUNT_FILE: ${GOOGLE_SERVICE_ACCOUNT_FILE:-google_key.json}
       GOOGLE_PATH_ZOOMER: ${GOOGLE_PATH_ZOOMER:-}
       GOOGLE_PATH_OPEN21: ${GOOGLE_PATH_OPEN21:-}
+      GOOGLE_PATH_FRIENDS: ${GOOGLE_PATH_FRIENDS:-}
     depends_on:
       - postgres
     volumes:

@@ -20,10 +20,15 @@ class Settings(BaseSettings):
     google_service_account_file: str = "google_key.json"
     google_path_zoomer: str | None = None
     google_path_open21: str | None = None
+    google_path_friends: str | None = None
 
     @property
     def google_exports_enabled(self) -> bool:
-        return bool(self.google_path_zoomer or self.google_path_open21)
+        return bool(
+            self.google_path_zoomer
+            or self.google_path_open21
+            or self.google_path_friends
+        )
 
 
 settings = Settings()  # pyright: ignore

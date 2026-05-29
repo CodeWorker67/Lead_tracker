@@ -14,6 +14,7 @@ from services.sources_stats import get_sources_stats
 BOT_EXPORTS: tuple[tuple[int, str | None], ...] = (
     (7412940598, settings.google_path_zoomer),
     (8159162956, settings.google_path_open21),
+    (8713389924, settings.google_path_friends),
 )
 
 SCOPES = (
