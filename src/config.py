@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     google_path_zoomer: str | None = None
     google_path_open21: str | None = None
     google_path_friends: str | None = None
+    google_path_social: str | None = None
 
     @property
     def google_exports_enabled(self) -> bool:
@@ -28,6 +29,7 @@ class Settings(BaseSettings):
             self.google_path_zoomer
             or self.google_path_open21
             or self.google_path_friends
+            or self.google_path_social
         )
 
 
