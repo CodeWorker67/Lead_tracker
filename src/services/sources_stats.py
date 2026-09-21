@@ -4,7 +4,9 @@ from datetime import datetime
 from typing import Any
 
 from database.models import Payment, User
-from sqlalchemy import case, func, select
+from sqlalchemy import and_, case, func, select
+
+RA_SOURCE_SUBSTRING = "ra_"
 
 
 def _apply_user_filters(
@@ -123,6 +125,95 @@ def get_sources_stats(
                 "paid_users": paid_map.get(src, 0),
                 "total_payments": int(pr.total_payments) if pr else 0,
                 "total_revenue": float(pr.total_revenue) if pr else 0.0,
+            }
+        )
+    return out
+
+
+def _ra_source_filter(source_expr):
+    return func.coalesce(source_expr, "").ilike(f"%{RA_SOURCE_SUBSTRING}%")
+
+
+def get_ra_sources_stats(
+    session,
+    *,
+    bot_id: int | None = None,
+) -> list[dict[str, Any]]:
+    """Статистика только по меткам с «ra_»: пользователи и сумма первых оплат."""
+    source_name = func.coalesce(User.source, "(Без источника)").label("source_name")
+
+    user_stmt = (
+        select(
+            source_name,
+            func.count(User.id).label("total_users"),
+        )
+        .select_from(User)
+        .where(_ra_source_filter(User.source))
+        .group_by(source_name)
+        .order_by(func.count(User.id).desc())
+    )
+    if bot_id is not None:
+        user_stmt = user_stmt.where(User.bot_id == bot_id)
+    user_rows = session.execute(user_stmt).all()
+
+    ranked_payments = (
+        select(
+            Payment.user_id,
+            Payment.bot_id,
+            Payment.amount,
+            func.row_number()
+            .over(
+                partition_by=(Payment.user_id, Payment.bot_id),
+                order_by=Payment.created_at.asc(),
+            )
+            .label("rn"),
+        )
+        .select_from(Payment)
+    )
+    if bot_id is not None:
+        ranked_payments = ranked_payments.where(Payment.bot_id == bot_id)
+    ranked_sub = ranked_payments.subquery()
+
+    first_pay_stmt = (
+        select(
+            source_name,
+            func.coalesce(func.sum(ranked_sub.c.amount), 0).label("first_payments_sum"),
+        )
+        .select_from(ranked_sub)
+        .join(
+            User,
+            and_(
+                User.user_id == ranked_sub.c.user_id,
+                User.bot_id == ranked_sub.c.bot_id,
+            ),
+        )
+        .where(ranked_sub.c.rn == 1)
+        .where(_ra_source_filter(User.source))
+        .group_by(source_name)
+    )
+    if bot_id is not None:
+        first_pay_stmt = first_pay_stmt.where(User.bot_id == bot_id)
+    pay_map = {
+        r.source_name: float(r.first_payments_sum or 0)
+        for r in session.execute(first_pay_stmt).all()
+    }
+
+    user_by_src = {r.source_name: r for r in user_rows}
+    all_sources = set(user_by_src) | set(pay_map)
+
+    def _sort_key(name: str) -> tuple[int, str]:
+        urow = user_by_src.get(name)
+        n = int(urow.total_users or 0) if urow else 0
+        return (-n, name)
+
+    out: list[dict[str, Any]] = []
+    for src in sorted(all_sources, key=_sort_key):
+        ur = user_by_src.get(src)
+        out.append(
+            {
+                "source_name": src,
+                "total_users": int(ur.total_users or 0) if ur else 0,
+                "first_payments_sum": pay_map.get(src, 0.0),
             }
         )
     return out

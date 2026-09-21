@@ -88,3 +88,31 @@ def build_sheet_rows(sources_data: list[dict[str, Any]]) -> list[list[str | int 
     )
     rows.extend(_source_row(source) for source in sources_data)
     return rows
+
+
+RA_SHEET_HEADERS = ["Источник", "Пользователи", "Оплаты"]
+
+
+def build_ra_sheet_rows(
+    sources_data: list[dict[str, Any]],
+) -> list[list[str | int | float]]:
+    total_users = sum(s["total_users"] for s in sources_data)
+    total_first_payments = sum(s["first_payments_sum"] for s in sources_data)
+
+    rows: list[list[str | int | float]] = [RA_SHEET_HEADERS]
+    rows.append(
+        [
+            "Всего",
+            total_users,
+            round(total_first_payments),
+        ]
+    )
+    for source in sources_data:
+        rows.append(
+            [
+                source["source_name"],
+                source["total_users"],
+                round(source["first_payments_sum"]),
+            ]
+        )
+    return rows

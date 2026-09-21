@@ -1,4 +1,8 @@
-from services.google_sheets_rows import build_sheet_rows, parse_spreadsheet_id
+from services.google_sheets_rows import (
+    build_ra_sheet_rows,
+    build_sheet_rows,
+    parse_spreadsheet_id,
+)
 
 
 def test_parse_spreadsheet_id_from_url() -> None:
@@ -42,3 +46,25 @@ def test_build_sheet_rows_total_first_then_sources() -> None:
     assert rows[1][9] == 3700
     assert rows[2][0] == "alpha"
     assert rows[3][0] == "beta"
+
+
+def test_build_ra_sheet_rows_total_first_then_sources() -> None:
+    sources = [
+        {
+            "source_name": "campaign_ra_alpha",
+            "total_users": 10,
+            "first_payments_sum": 1500.5,
+        },
+        {
+            "source_name": "other_ra_beta",
+            "total_users": 5,
+            "first_payments_sum": 999.4,
+        },
+    ]
+
+    rows = build_ra_sheet_rows(sources)
+
+    assert rows[0] == ["Источник", "Пользователи", "Оплаты"]
+    assert rows[1] == ["Всего", 15, 2500]
+    assert rows[2] == ["campaign_ra_alpha", 10, 1500]
+    assert rows[3] == ["other_ra_beta", 5, 999]
