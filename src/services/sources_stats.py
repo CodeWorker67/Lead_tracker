@@ -133,7 +133,7 @@ def get_sources_stats(
 def _ra_source_filter(source_expr):
     # Не ILIKE: в LIKE/ILIKE «_» — один любой символ («referral», «Brawl» проходили как «ra»+символ).
     haystack = func.lower(func.coalesce(source_expr, ""))
-    return funcstrpos(haystack, RA_SOURCE_SUBSTRING) > 0
+    return func.strpos(haystack, RA_SOURCE_SUBSTRING) > 0
 
 
 def get_ra_sources_stats(
