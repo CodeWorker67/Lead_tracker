@@ -148,6 +148,10 @@ def get_ra_sources_stats(
         select(
             source_name,
             func.count(User.id).label("total_users"),
+            func.sum(case((User.trial_at.isnot(None), 1), else_=0)).label("trial_users"),
+            func.sum(
+                case((User.connected_at.isnot(None), 1), else_=0)
+            ).label("connected_users"),
         )
         .select_from(User)
         .where(_ra_source_filter(User.source))
@@ -200,8 +204,38 @@ def get_ra_sources_stats(
         for r in session.execute(first_pay_stmt).all()
     }
 
+    paid_inner = (
+        select(
+            source_name,
+            Payment.user_id,
+            Payment.bot_id,
+        )
+        .select_from(Payment)
+        .join(
+            User,
+            and_(
+                User.user_id == Payment.user_id,
+                User.bot_id == Payment.bot_id,
+            ),
+        )
+        .where(_ra_source_filter(User.source))
+        .distinct()
+    )
+    if bot_id is not None:
+        paid_inner = paid_inner.where(Payment.bot_id == bot_id)
+    paid_sub = paid_inner.subquery()
+    paid_stmt = (
+        select(paid_sub.c.source_name, func.count().label("paid_users"))
+        .select_from(paid_sub)
+        .group_by(paid_sub.c.source_name)
+    )
+    paid_map = {
+        r.source_name: int(r.paid_users or 0)
+        for r in session.execute(paid_stmt).all()
+    }
+
     user_by_src = {r.source_name: r for r in user_rows}
-    all_sources = set(user_by_src) | set(pay_map)
+    all_sources = set(user_by_src) | set(pay_map) | set(paid_map)
 
     def _sort_key(name: str) -> tuple[int, str]:
         urow = user_by_src.get(name)
@@ -215,6 +249,9 @@ def get_ra_sources_stats(
             {
                 "source_name": src,
                 "total_users": int(ur.total_users or 0) if ur else 0,
+                "trial_users": int(ur.trial_users or 0) if ur else 0,
+                "connected_users": int(ur.connected_users or 0) if ur else 0,
+                "paid_users": paid_map.get(src, 0),
                 "first_payments_sum": pay_map.get(src, 0.0),
             }
         )

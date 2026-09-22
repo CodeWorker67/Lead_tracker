@@ -90,13 +90,43 @@ def build_sheet_rows(sources_data: list[dict[str, Any]]) -> list[list[str | int 
     return rows
 
 
-RA_SHEET_HEADERS = ["Источник", "Пользователи", "Оплаты"]
+RA_SHEET_HEADERS = [
+    "Источник",
+    "Пользователи",
+    "Триал",
+    "Триал %",
+    "Подключились",
+    "Подкл. %",
+    "Оплатили",
+    "Оплатили %",
+    "Оплаты",
+]
+
+
+def _ra_metrics_columns(source: dict[str, Any]) -> list[str | int | float]:
+    total_users = source["total_users"]
+    trial_users = source["trial_users"]
+    connected_users = source["connected_users"]
+    paid_users = source["paid_users"]
+    return [
+        total_users,
+        trial_users,
+        _pct(trial_users, total_users),
+        connected_users,
+        _pct(connected_users, total_users),
+        paid_users,
+        _pct(paid_users, total_users),
+        round(source["first_payments_sum"]),
+    ]
 
 
 def build_ra_sheet_rows(
     sources_data: list[dict[str, Any]],
 ) -> list[list[str | int | float]]:
     total_users = sum(s["total_users"] for s in sources_data)
+    total_trial = sum(s["trial_users"] for s in sources_data)
+    total_connected = sum(s["connected_users"] for s in sources_data)
+    total_paid_users = sum(s["paid_users"] for s in sources_data)
     total_first_payments = sum(s["first_payments_sum"] for s in sources_data)
 
     rows: list[list[str | int | float]] = [RA_SHEET_HEADERS]
@@ -104,15 +134,15 @@ def build_ra_sheet_rows(
         [
             "Всего",
             total_users,
+            total_trial,
+            _pct(total_trial, total_users),
+            total_connected,
+            _pct(total_connected, total_users),
+            total_paid_users,
+            _pct(total_paid_users, total_users),
             round(total_first_payments),
         ]
     )
     for source in sources_data:
-        rows.append(
-            [
-                source["source_name"],
-                source["total_users"],
-                round(source["first_payments_sum"]),
-            ]
-        )
+        rows.append([source["source_name"], *_ra_metrics_columns(source)])
     return rows
