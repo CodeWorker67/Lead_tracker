@@ -28,7 +28,6 @@ services:
       GOOGLE_PATH_OPEN21: ${GOOGLE_PATH_OPEN21:-}
       GOOGLE_PATH_FRIENDS: ${GOOGLE_PATH_FRIENDS:-}
       GOOGLE_PATH_SOCIAL: ${GOOGLE_PATH_SOCIAL:-}
-      GOOGLE_PATH_ZOOMER_RA: ${GOOGLE_PATH_ZOOMER_RA:-}
     depends_on:
       - postgres
     volumes:

@@ -8,12 +8,8 @@ from loguru import logger
 from sqlalchemy.orm import Session
 
 from config import settings
-from services.google_sheets_rows import (
-    build_ra_sheet_rows,
-    build_sheet_rows,
-    parse_spreadsheet_id,
-)
-from services.sources_stats import get_ra_sources_stats, get_sources_stats
+from services.google_sheets_rows import build_sheet_rows, parse_spreadsheet_id
+from services.sources_stats import get_sources_stats
 
 ZOOMER_BOT_ID = 7412940598
 
@@ -74,32 +70,6 @@ def export_bot_to_sheet(
     )
 
 
-def export_zoomer_ra_to_sheet(
-    session: Session,
-    *,
-    client: gspread.Client | None = None,
-) -> None:
-    spreadsheet_ref = settings.google_path_zoomer_ra
-    if not spreadsheet_ref:
-        return
-
-    sources_data = get_ra_sources_stats(session, bot_id=ZOOMER_BOT_ID)
-    rows = build_ra_sheet_rows(sources_data)
-
-    spreadsheet_id = parse_spreadsheet_id(spreadsheet_ref)
-    gc = client or _get_gspread_client()
-    spreadsheet = gc.open_by_key(spreadsheet_id)
-    worksheet = spreadsheet.sheet1
-    worksheet.clear()
-    worksheet.update(rows, value_input_option="USER_ENTERED")
-    logger.info(
-        "Google Sheets RA export done: bot_id={} spreadsheet={} rows={}",
-        ZOOMER_BOT_ID,
-        spreadsheet_id,
-        len(rows),
-    )
-
-
 def export_all_configured_bots() -> None:
     if not settings.google_exports_enabled:
         return
@@ -113,6 +83,5 @@ def export_all_configured_bots() -> None:
             if not spreadsheet_ref:
                 continue
             export_bot_to_sheet(session, bot_id, spreadsheet_ref, client=client)
-        export_zoomer_ra_to_sheet(session, client=client)
     finally:
         session.close()
