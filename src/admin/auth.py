@@ -6,6 +6,7 @@ from typing import Callable
 import extra_streamlit_components as stx
 import streamlit as st
 
+from admin.audit_log import audit_info, audit_warning
 from config import settings
 
 # Cookie settings
@@ -44,6 +45,13 @@ def current_allowed_bot_id() -> int | None:
     if not username:
         return None
     return get_allowed_bot_id(username)
+
+
+def _auth_scope_label(username: str) -> str:
+    bot_id = get_allowed_bot_id(username)
+    if bot_id is None:
+        return "all_bots"
+    return f"bot_id={bot_id}"
 
 
 def _get_cookie_manager():
@@ -113,6 +121,9 @@ def check_password() -> bool:
         else:
             # Invalid or expired token - delete cookie
             cookie_manager.delete(COOKIE_NAME)
+            if not st.session_state.get("_auth_cookie_invalid_logged"):
+                audit_warning("Admin auth cookie invalid or expired, cleared")
+                st.session_state["_auth_cookie_invalid_logged"] = True
 
     # Return True if already authenticated in session
     if st.session_state.get("authenticated", False):
@@ -125,6 +136,12 @@ def check_password() -> bool:
         if verify_credentials(username, password):
             st.session_state["authenticated"] = True
             st.session_state["username"] = username
+            audit_info(
+                "Admin login: user=%s scope=%s",
+                username,
+                _auth_scope_label(username),
+            )
+            st.session_state["_admin_audit_session_logged"] = True
 
             # Generate and save auth token to cookie
             token = _generate_token(st.session_state["login_username"])
@@ -140,6 +157,7 @@ def check_password() -> bool:
         else:
             st.session_state["authenticated"] = False
             st.session_state["login_failed"] = True
+            audit_warning("Admin login failed: user=%s", username)
 
     # Show login form
     st.markdown("## Вход в систему")
@@ -170,6 +188,7 @@ def check_password() -> bool:
 
 def logout():
     """Log out the user by clearing session state and deleting auth cookie."""
+    username = st.session_state.get("username")
     cookie_manager = _get_cookie_manager()
     cookie_manager.delete(COOKIE_NAME)
 
@@ -177,6 +196,12 @@ def logout():
     if "username" in st.session_state:
         del st.session_state["username"]
 
+    if username:
+        audit_info("Admin logout: user=%s", username)
+    else:
+        audit_info("Admin logout: user=<unknown>")
+
+    st.session_state.pop("_admin_audit_session_logged", None)
     st.rerun()
 
 

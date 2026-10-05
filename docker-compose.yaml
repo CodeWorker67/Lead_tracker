@@ -50,7 +50,7 @@ services:
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
       ADMIN_COOKIE_SECRET: ${ADMIN_COOKIE_SECRET:-default-secret-change-in-production}
-      ADMIN_SCOPED_USERS: ${ADMIN_SCOPED_USERS:-}
+      ADMIN_SCOPED_USERS: ${ADMIN_SCOPED_USERS:-svoi:svoi:8713389924}
     depends_on:
       - postgres
     volumes:
@@ -60,4 +60,4 @@ services:
       - backend
     ports:
       - "${ADMIN_PORT:-8501}:8501"
-    command: uv run streamlit run admin/Home.py --server.port 8501 --server.address 0.0.0.0
+    command: uv run streamlit run admin/Home.py --server.port 8501 --server.address 0.0.0.0 --logger.level=info

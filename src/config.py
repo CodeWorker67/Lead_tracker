@@ -9,6 +9,9 @@ class AdminScopedUser:
     bot_id: int
 
 
+DEFAULT_ADMIN_SCOPED_USERS = "svoi:svoi:8713389924"
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -25,14 +28,12 @@ class Settings(BaseSettings):
     admin_password: str = "admin"
     admin_cookie_secret: str = "default-secret-change-in-production"
     # Ограниченные пользователи: login:password:bot_id через «;»
-    admin_scoped_users: str = ""
+    admin_scoped_users: str = DEFAULT_ADMIN_SCOPED_USERS
 
     def scoped_admin_users(self) -> dict[str, AdminScopedUser]:
         """Парсит ADMIN_SCOPED_USERS."""
         result: dict[str, AdminScopedUser] = {}
-        raw = self.admin_scoped_users.strip()
-        if not raw:
-            return result
+        raw = self.admin_scoped_users.strip() or DEFAULT_ADMIN_SCOPED_USERS
         for entry in raw.split(";"):
             entry = entry.strip()
             if not entry:
