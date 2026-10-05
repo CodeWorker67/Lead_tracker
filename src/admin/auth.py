@@ -129,36 +129,6 @@ def check_password() -> bool:
     if st.session_state.get("authenticated", False):
         return True
 
-    def password_entered():
-        """Checks whether a password entered by the user is correct."""
-        username = st.session_state["login_username"]
-        password = st.session_state["login_password"]
-        if verify_credentials(username, password):
-            st.session_state["authenticated"] = True
-            st.session_state["username"] = username
-            audit_info(
-                "Admin login: user=%s scope=%s",
-                username,
-                _auth_scope_label(username),
-            )
-            st.session_state["_admin_audit_session_logged"] = True
-
-            # Generate and save auth token to cookie
-            token = _generate_token(st.session_state["login_username"])
-            cookie_manager.set(
-                COOKIE_NAME,
-                token,
-                expires_at=None,  # Session cookie, or use datetime for expiry
-                key="set_auth_cookie"
-            )
-
-            del st.session_state["login_password"]
-            del st.session_state["login_username"]
-        else:
-            st.session_state["authenticated"] = False
-            st.session_state["login_failed"] = True
-            audit_warning("Admin login failed: user=%s", username)
-
     # Show login form
     st.markdown("## Вход в систему")
     st.markdown("")
@@ -166,18 +136,42 @@ def check_password() -> bool:
     col1, col2, col3 = st.columns([1, 2, 1])
 
     with col2:
-        st.text_input(
-            "Имя пользователя",
-            key="login_username",
-            placeholder="Введите имя пользователя"
-        )
-        st.text_input(
-            "Пароль",
-            type="password",
-            key="login_password",
-            placeholder="Введите пароль"
-        )
-        st.button("Войти", on_click=password_entered, type="primary", use_container_width=True)
+        with st.form("admin_login_form", clear_on_submit=False):
+            username = st.text_input(
+                "Имя пользователя",
+                placeholder="Введите имя пользователя",
+            )
+            password = st.text_input(
+                "Пароль",
+                type="password",
+                placeholder="Введите пароль",
+            )
+            submitted = st.form_submit_button(
+                "Войти", type="primary", use_container_width=True
+            )
+
+        if submitted:
+            if verify_credentials(username, password):
+                st.session_state["authenticated"] = True
+                st.session_state["username"] = username
+                audit_info(
+                    "Admin login: user=%s scope=%s",
+                    username,
+                    _auth_scope_label(username),
+                )
+                st.session_state["_admin_audit_session_logged"] = True
+                token = _generate_token(username)
+                cookie_manager.set(
+                    COOKIE_NAME,
+                    token,
+                    expires_at=None,
+                    key="set_auth_cookie",
+                )
+                st.rerun()
+            else:
+                st.session_state["authenticated"] = False
+                st.session_state["login_failed"] = True
+                audit_warning("Admin login failed: user=%s", username)
 
         if st.session_state.get("login_failed", False):
             st.error("Неверное имя пользователя или пароль")
