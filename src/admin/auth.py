@@ -11,6 +11,7 @@ from config import settings
 # Cookie settings
 COOKIE_NAME = "lead_tracker_auth"
 COOKIE_EXPIRY_DAYS = 1  # 24 hours
+_COOKIE_MANAGER_SESSION_KEY = "_lead_tracker_cookie_manager"
 
 
 def verify_credentials(username: str, password: str) -> bool:
@@ -46,8 +47,12 @@ def current_allowed_bot_id() -> int | None:
 
 
 def _get_cookie_manager():
-    """Get or create cookie manager instance."""
-    return stx.CookieManager()
+    """Один CookieManager на сессию (иначе StreamlitDuplicateElementKey при logout)."""
+    if _COOKIE_MANAGER_SESSION_KEY not in st.session_state:
+        st.session_state[_COOKIE_MANAGER_SESSION_KEY] = stx.CookieManager(
+            key="lead_tracker_cookie_manager"
+        )
+    return st.session_state[_COOKIE_MANAGER_SESSION_KEY]
 
 
 def _generate_token(username: str) -> str:

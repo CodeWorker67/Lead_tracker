@@ -47,6 +47,10 @@ services:
     environment:
       POSTGRES_DSN: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       PYTHONPATH: /app/src
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+      ADMIN_COOKIE_SECRET: ${ADMIN_COOKIE_SECRET:-default-secret-change-in-production}
+      ADMIN_SCOPED_USERS: ${ADMIN_SCOPED_USERS:-}
     depends_on:
       - postgres
     volumes:
