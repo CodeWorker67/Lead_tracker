@@ -1,4 +1,12 @@
+from dataclasses import dataclass
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+@dataclass(frozen=True)
+class AdminScopedUser:
+    password: str
+    bot_id: int
 
 
 class Settings(BaseSettings):
@@ -16,6 +24,30 @@ class Settings(BaseSettings):
     admin_username: str = "admin"
     admin_password: str = "admin"
     admin_cookie_secret: str = "default-secret-change-in-production"
+    # Ограниченные пользователи: login:password:bot_id через «;»
+    admin_scoped_users: str = ""
+
+    def scoped_admin_users(self) -> dict[str, AdminScopedUser]:
+        """Парсит ADMIN_SCOPED_USERS."""
+        result: dict[str, AdminScopedUser] = {}
+        raw = self.admin_scoped_users.strip()
+        if not raw:
+            return result
+        for entry in raw.split(";"):
+            entry = entry.strip()
+            if not entry:
+                continue
+            parts = entry.split(":")
+            if len(parts) != 3:
+                continue
+            login, password, bot_id_str = parts
+            login = login.strip()
+            if not login:
+                continue
+            result[login] = AdminScopedUser(
+                password=password, bot_id=int(bot_id_str.strip())
+            )
+        return result
 
     google_service_account_file: str = "google_key.json"
     google_path_zoomer: str | None = None

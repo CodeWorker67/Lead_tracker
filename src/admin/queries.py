@@ -15,16 +15,33 @@ def get_distinct_bots(session: Session) -> list[tuple[int, str | None]]:
     return [(int(r[0]), r[1]) for r in rows]
 
 
-def render_bot_filter(session: Session, column) -> int | None:
-    """Селектор бота. Возвращает bot_id или None = все боты."""
+def _bot_label(bot_id: int, bot_name: str | None) -> str:
+    name_part = (bot_name or "").strip()
+    return f"{name_part} (id {bot_id})" if name_part else f"Бот {bot_id}"
+
+
+def render_bot_filter(
+    session: Session,
+    column,
+    allowed_bot_id: int | None = None,
+) -> int | None:
+    """
+    Селектор бота. Возвращает bot_id или None = все боты.
+    Если allowed_bot_id задан — только этот бот, без выбора «Все боты».
+    """
+    if allowed_bot_id is not None:
+        rows = get_distinct_bots(session)
+        match = next((r for r in rows if r[0] == allowed_bot_id), None)
+        label = _bot_label(allowed_bot_id, match[1] if match else None)
+        with column:
+            st.selectbox("Бот", [label], index=0, disabled=True)
+        return allowed_bot_id
+
     rows = get_distinct_bots(session)
     if not rows:
         return None
 
-    labels: list[str] = []
-    for bot_id, bot_name in rows:
-        name_part = (bot_name or "").strip()
-        labels.append(f"{name_part} (id {bot_id})" if name_part else f"Бот {bot_id}")
+    labels = [_bot_label(bot_id, bot_name) for bot_id, bot_name in rows]
 
     with column:
         options = ["Все боты"] + labels

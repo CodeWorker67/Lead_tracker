@@ -11,7 +11,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from admin.auth import logout, require_auth
+from admin.auth import current_allowed_bot_id, logout, require_auth
 from admin.db import get_session
 from admin.queries import render_bot_filter
 from services.sources_stats import get_sources_stats
@@ -199,7 +199,9 @@ def main():
 
     session = get_session()
     try:
-        selected_bot_id = render_bot_filter(session, col4)
+        selected_bot_id = render_bot_filter(
+            session, col4, allowed_bot_id=current_allowed_bot_id()
+        )
     finally:
         session.close()
 

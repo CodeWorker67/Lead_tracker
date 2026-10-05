@@ -14,7 +14,7 @@ import streamlit as st
 from database.models import Payment, User
 from sqlalchemy import select, tuple_
 
-from admin.auth import logout, require_auth
+from admin.auth import current_allowed_bot_id, logout, require_auth
 from admin.db import get_session
 from admin.queries import render_bot_filter
 
@@ -363,7 +363,9 @@ def main():
 
     session = get_session()
     try:
-        selected_bot_id = render_bot_filter(session, col4)
+        selected_bot_id = render_bot_filter(
+            session, col4, allowed_bot_id=current_allowed_bot_id()
+        )
     finally:
         session.close()
 

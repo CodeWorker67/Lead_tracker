@@ -13,6 +13,38 @@ COOKIE_NAME = "lead_tracker_auth"
 COOKIE_EXPIRY_DAYS = 1  # 24 hours
 
 
+def verify_credentials(username: str, password: str) -> bool:
+    """Проверка логина: полный admin или пользователь из ADMIN_SCOPED_USERS."""
+    if (
+        username == settings.admin_username
+        and password == settings.admin_password
+    ):
+        return True
+    scoped = settings.scoped_admin_users().get(username)
+    return scoped is not None and scoped.password == password
+
+
+def get_allowed_bot_id(username: str) -> int | None:
+    """
+    None — доступ ко всем ботам (admin).
+    int — только данные указанного bot_id.
+    """
+    if username == settings.admin_username:
+        return None
+    scoped = settings.scoped_admin_users().get(username)
+    if scoped is not None:
+        return scoped.bot_id
+    return None
+
+
+def current_allowed_bot_id() -> int | None:
+    """Ограничение бота для текущей сессии (None = все боты)."""
+    username = st.session_state.get("username")
+    if not username:
+        return None
+    return get_allowed_bot_id(username)
+
+
 def _get_cookie_manager():
     """Get or create cookie manager instance."""
     return stx.CookieManager()
@@ -83,12 +115,11 @@ def check_password() -> bool:
 
     def password_entered():
         """Checks whether a password entered by the user is correct."""
-        if (
-            st.session_state["login_username"] == settings.admin_username
-            and st.session_state["login_password"] == settings.admin_password
-        ):
+        username = st.session_state["login_username"]
+        password = st.session_state["login_password"]
+        if verify_credentials(username, password):
             st.session_state["authenticated"] = True
-            st.session_state["username"] = st.session_state["login_username"]
+            st.session_state["username"] = username
 
             # Generate and save auth token to cookie
             token = _generate_token(st.session_state["login_username"])

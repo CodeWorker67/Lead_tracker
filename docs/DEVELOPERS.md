@@ -342,7 +342,8 @@ Swagger UI: `/docs`. ReDoc: `/redoc`.
 
 `src/admin/auth.py`:
 
-- логин/пароль из `settings.admin_username` / `settings.admin_password` (по умолчанию `admin/admin`);
+- логин/пароль из `settings.admin_username` / `settings.admin_password` (по умолчанию `admin/admin`) — полный доступ ко всем ботам;
+- дополнительные пользователи с доступом только к одному боту — `ADMIN_SCOPED_USERS` (формат `login:password:bot_id`, несколько записей через `;`);
 - после входа выпускается HMAC-SHA256 токен (`username:timestamp:signature`), подписанный `settings.admin_cookie_secret`;
 - токен хранится в cookie `lead_tracker_auth`, TTL — 1 сутки;
 - декоратор `@require_auth` оборачивает `main()` каждой страницы.
@@ -492,6 +493,7 @@ class Settings(BaseSettings):
 | `ADMIN_USERNAME`       | Admin Panel                    | нет            | Логин админа (default `admin`).                                  |
 | `ADMIN_PASSWORD`       | Admin Panel                    | нет            | Пароль админа (default `admin`).                                 |
 | `ADMIN_COOKIE_SECRET`  | Admin Panel                    | **в проде да** | Секрет для подписи cookie. Default небезопасен.                 |
+| `ADMIN_SCOPED_USERS`   | Admin Panel                    | нет            | Пользователи с доступом к одному боту: `login:pass:bot_id;…`.   |
 
 `example.env` содержит шаблон.
 
